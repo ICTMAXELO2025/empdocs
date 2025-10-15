@@ -1,0 +1,61 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Welcome, {{ current_user.username }}!</h2>
+        <p class="lead">Secure Document Management System</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">📤 Upload Documents</h5>
+                <p class="card-text">Securely upload your important documents</p>
+                <a href="{{ url_for('upload') }}" class="btn btn-primary">Upload Now</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">📁 My Documents</h5>
+                <p class="card-text">View and manage your uploaded documents</p>
+                <p class="h4">{{ doc_count }}</p>
+                <a href="{{ url_for('documents') }}" class="btn btn-outline-primary">View Documents</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">🔒 Security</h5>
+                <p class="card-text">Your documents are protected with dual password security</p>
+                <small>Document access requires separate password verification</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>How it works</h5>
+            </div>
+            <div class="card-body">
+                <ol>
+                    <li><strong>Login</strong> with your account credentials</li>
+                    <li><strong>Upload</strong> your important documents</li>
+                    <li><strong>Access</strong> documents using your document access password</li>
+                    <li><strong>Download/Delete</strong> files after password verification</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

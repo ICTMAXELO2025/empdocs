@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">Employee Profile</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Account Information</h6>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th>Username:</th>
+                                <td>{{ current_user.username }}</td>
+                            </tr>
+                            <tr>
+                                <th>Member Since:</th>
+                                <td>{{ current_user.created_at.strftime('%Y-%m-%d') }}</td>
+                            </tr>
+                            <tr>
+                                <th>Total Documents:</th>
+                                <td>{{ documents|length if documents else 0 }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <h6>🔒 Security Information</h6>
+                            <p class="mb-2">Your documents are protected with dual password security:</p>
+                            <ul class="mb-0">
+                                <li><strong>Login Password:</strong> For account access</li>
+                                <li><strong>Document Password:</strong> For file operations</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Security Tips</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="alert alert-warning">
+                            <h6>✅ Best Practices</h6>
+                            <ul class="mb-0">
+                                <li>Use strong, unique passwords</li>
+                                <li>Never share your document access password</li>
+                                <li>Log out after each session</li>
+                                <li>Keep your passwords secure</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-success">
+                            <h6>📁 Document Security</h6>
+                            <ul class="mb-0">
+                                <li>Each download requires password verification</li>
+                                <li>Files are encrypted in storage</li>
+                                <li>Only you can access your documents</li>
+                                <li>Secure file deletion</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

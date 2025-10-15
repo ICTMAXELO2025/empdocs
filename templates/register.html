@@ -1,0 +1,44 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">Employee Registration</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="login_password" class="form-label">Login Password</label>
+                        <input type="password" class="form-control" id="login_password" name="login_password" required>
+                        <div class="form-text">This password is for logging into your account</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="doc_password" class="form-label">Document Access Password</label>
+                        <input type="password" class="form-control" id="doc_password" name="doc_password" required>
+                        <div class="form-text">This password will be required to access your documents</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="confirm_doc_password" class="form-label">Confirm Document Access Password</label>
+                        <input type="password" class="form-control" id="confirm_doc_password" name="confirm_doc_password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">Register</button>
+                </form>
+                
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('login') }}">Already have an account? Login here</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
