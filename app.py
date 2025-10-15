@@ -8,6 +8,10 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import bcrypt
 import io
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,12 +20,25 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-this')
 
-# Database configuration for Render
-database_url = os.environ.get('DATABASE_URL', 'postgresql://postgres:Maxelo@2023@localhost:5432/employee_docs')
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+# Database configuration - Fixed for PostgreSQL and Render
+def get_database_url():
+    database_url = os.environ.get('DATABASE_URL')
+    
+    if database_url:
+        # Fix for Render PostgreSQL URL format
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
+        return database_url
+    else:
+        # Local development - use your PostgreSQL credentials
+        return 'postgresql://postgres:Maxelo@2023@localhost:5432/employee_docs'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = get_database_url()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_recycle': 300,
+    'pool_pre_ping': True
+}
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -37,7 +54,7 @@ class Employee(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    doc_access_password_hash = db.Column(db.String(255), nullable=False)  # Separate password for document access
+    doc_access_password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     documents = db.relationship('Document', backref='owner', lazy=True, cascade='all, delete-orphan')
 
@@ -56,14 +73,30 @@ def load_user(user_id):
     return Employee.query.get(int(user_id))
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def init_db():
     """Initialize database and create tables"""
     with app.app_context():
-        db.create_all()
-        logger.info("Database tables created successfully")
+        try:
+            db.create_all()
+            logger.info("✅ Database tables created successfully")
+            
+            # Create default admin user if no users exist
+            if not Employee.query.first():
+                admin = Employee(
+                    username='admin',
+                    password_hash=generate_password_hash('admin123'),
+                    doc_access_password_hash=generate_password_hash('doc123')
+                )
+                db.session.add(admin)
+                db.session.commit()
+                logger.info("✅ Default admin user created")
+                
+        except Exception as e:
+            logger.error(f"❌ Database initialization error: {e}")
+            # Don't crash the app if database fails
+            pass
 
 # Routes
 @app.route('/')
@@ -74,6 +107,9 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+        
     if request.method == 'POST':
         username = request.form.get('username')
         login_password = request.form.get('login_password')
@@ -92,19 +128,24 @@ def register():
             flash('Username already exists')
             return render_template('register.html')
         
-        # Create new employee with separate passwords
-        employee = Employee(
-            username=username,
-            password_hash=generate_password_hash(login_password),
-            doc_access_password_hash=generate_password_hash(doc_password)
-        )
-        
-        db.session.add(employee)
-        db.session.commit()
-        
-        logger.info(f"New employee registered: {username}")
-        flash('Registration successful! Please login with your credentials.')
-        return redirect(url_for('login'))
+        try:
+            employee = Employee(
+                username=username,
+                password_hash=generate_password_hash(login_password),
+                doc_access_password_hash=generate_password_hash(doc_password)
+            )
+            
+            db.session.add(employee)
+            db.session.commit()
+            
+            logger.info(f"✅ New employee registered: {username}")
+            flash('Registration successful! Please login with your credentials.')
+            return redirect(url_for('login'))
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"❌ Registration error: {e}")
+            flash('Registration failed. Please try again.')
     
     return render_template('register.html')
 
@@ -121,12 +162,12 @@ def login():
         
         if employee and check_password_hash(employee.password_hash, password):
             login_user(employee)
-            logger.info(f"Employee {username} logged in successfully")
+            logger.info(f"✅ Employee {username} logged in successfully")
             flash('Login successful!')
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password')
-            logger.warning(f"Failed login attempt for username: {username}")
+            logger.warning(f"❌ Failed login attempt for username: {username}")
     
     return render_template('login.html')
 
@@ -140,7 +181,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    doc_count = Document.query.filter_by(employee_id=current_user.id).count()
+    try:
+        doc_count = Document.query.filter_by(employee_id=current_user.id).count()
+    except Exception as e:
+        logger.error(f"❌ Error getting document count: {e}")
+        doc_count = 0
     return render_template('dashboard.html', doc_count=doc_count)
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -160,23 +205,34 @@ def upload():
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file_data = file.read()
+            
+            if len(file_data) > app.config['MAX_CONTENT_LENGTH']:
+                flash('File too large. Maximum size is 16MB.')
+                return redirect(request.url)
+                
             file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'unknown'
             
-            document = Document(
-                filename=f"{current_user.id}_{datetime.utcnow().timestamp()}_{filename}",
-                original_filename=filename,
-                file_data=file_data,
-                employee_id=current_user.id,
-                file_size=len(file_data),
-                file_type=file_extension
-            )
-            
-            db.session.add(document)
-            db.session.commit()
-            
-            logger.info(f"Employee {current_user.username} uploaded file: {filename}")
-            flash('File uploaded successfully!')
-            return redirect(url_for('documents'))
+            try:
+                document = Document(
+                    filename=f"{current_user.id}_{datetime.utcnow().timestamp()}_{filename}",
+                    original_filename=filename,
+                    file_data=file_data,
+                    employee_id=current_user.id,
+                    file_size=len(file_data),
+                    file_type=file_extension
+                )
+                
+                db.session.add(document)
+                db.session.commit()
+                
+                logger.info(f"✅ Employee {current_user.username} uploaded file: {filename}")
+                flash('File uploaded successfully!')
+                return redirect(url_for('documents'))
+                
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"❌ Upload error: {e}")
+                flash('Upload failed. Please try again.')
         else:
             flash('File type not allowed. Allowed types: ' + ', '.join(ALLOWED_EXTENSIONS))
     
@@ -185,7 +241,13 @@ def upload():
 @app.route('/documents')
 @login_required
 def documents():
-    employee_documents = Document.query.filter_by(employee_id=current_user.id).order_by(Document.upload_date.desc()).all()
+    try:
+        employee_documents = Document.query.filter_by(employee_id=current_user.id).order_by(Document.upload_date.desc()).all()
+    except Exception as e:
+        logger.error(f"❌ Error getting documents: {e}")
+        employee_documents = []
+        flash('Error loading documents. Please try again.')
+    
     return render_template('documents.html', documents=employee_documents)
 
 @app.route('/verify_doc_password', methods=['POST'])
@@ -195,33 +257,36 @@ def verify_doc_password():
     document_id = request.form.get('document_id')
     action = request.form.get('action')
     
-    document = Document.query.get_or_404(document_id)
-    
-    # Verify document belongs to current user
-    if document.employee_id != current_user.id:
-        flash('Access denied')
-        logger.warning(f"Unauthorized access attempt by {current_user.username} for document {document_id}")
-        return redirect(url_for('documents'))
-    
-    # Verify document access password
-    if not check_password_hash(current_user.doc_access_password_hash, doc_password):
-        flash('Invalid document access password')
-        return redirect(url_for('documents'))
-    
-    # Perform the requested action
-    if action == 'download':
-        logger.info(f"Employee {current_user.username} downloaded file: {document.original_filename}")
-        return send_file(
-            io.BytesIO(document.file_data),
-            as_attachment=True,
-            download_name=document.original_filename,
-            mimetype='application/octet-stream'
-        )
-    elif action == 'delete':
-        db.session.delete(document)
-        db.session.commit()
-        logger.info(f"Employee {current_user.username} deleted file: {document.original_filename}")
-        flash('File deleted successfully!')
+    try:
+        document = Document.query.get_or_404(document_id)
+        
+        if document.employee_id != current_user.id:
+            flash('Access denied')
+            logger.warning(f"❌ Unauthorized access attempt by {current_user.username}")
+            return redirect(url_for('documents'))
+        
+        if not check_password_hash(current_user.doc_access_password_hash, doc_password):
+            flash('Invalid document access password')
+            return redirect(url_for('documents'))
+        
+        if action == 'download':
+            logger.info(f"✅ Employee {current_user.username} downloaded: {document.original_filename}")
+            return send_file(
+                io.BytesIO(document.file_data),
+                as_attachment=True,
+                download_name=document.original_filename,
+                mimetype='application/octet-stream'
+            )
+        elif action == 'delete':
+            db.session.delete(document)
+            db.session.commit()
+            logger.info(f"✅ Employee {current_user.username} deleted: {document.original_filename}")
+            flash('File deleted successfully!')
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"❌ Document operation error: {e}")
+        flash('Operation failed. Please try again.')
     
     return redirect(url_for('documents'))
 
@@ -240,7 +305,14 @@ def too_large(e):
 def not_found(e):
     return render_template('404.html'), 404
 
+@app.errorhandler(500)
+def internal_error(e):
+    db.session.rollback()
+    return render_template('500.html'), 500
+
+# Initialize database when app starts
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
