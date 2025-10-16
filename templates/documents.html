@@ -28,31 +28,19 @@
                         <td>{{ "%.2f"|format(doc.file_size / 1024) }} KB</td>
                         <td>{{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}</td>
                         <td>
-                            <!-- Download Form -->
-                            <form method="POST" action="{{ url_for('verify_doc_password') }}" class="d-inline">
+                            <!-- Download Button -->
+                            <form method="POST" action="{{ url_for('download_document') }}" class="d-inline">
                                 <input type="hidden" name="document_id" value="{{ doc.id }}">
-                                <input type="hidden" name="action" value="download">
-                                <div class="input-group input-group-sm">
-                                    <input type="password" class="form-control form-control-sm" 
-                                           placeholder="Doc Password" name="doc_password" required
-                                           style="max-width: 120px;">
-                                    <button type="submit" class="btn btn-success btn-sm">Download</button>
-                                </div>
+                                <button type="submit" class="btn btn-success btn-sm">Download</button>
                             </form>
                             
-                            <!-- Delete Form -->
-                            <form method="POST" action="{{ url_for('verify_doc_password') }}" class="d-inline ms-1">
+                            <!-- Delete Button -->
+                            <form method="POST" action="{{ url_for('delete_document') }}" class="d-inline ms-1">
                                 <input type="hidden" name="document_id" value="{{ doc.id }}">
-                                <input type="hidden" name="action" value="delete">
-                                <div class="input-group input-group-sm">
-                                    <input type="password" class="form-control form-control-sm" 
-                                           placeholder="Doc Password" name="doc_password" required
-                                           style="max-width: 120px;">
-                                    <button type="submit" class="btn btn-danger btn-sm" 
-                                            onclick="return confirm('Are you sure you want to delete this document?')">
-                                        Delete
-                                    </button>
-                                </div>
+                                <button type="submit" class="btn btn-danger btn-sm" 
+                                        onclick="return confirm('Are you sure you want to delete this document?')">
+                                    Delete
+                                </button>
                             </form>
                         </td>
                     </tr>
@@ -75,9 +63,9 @@
             <div class="card-body">
                 <h6>🔒 Document Access Security</h6>
                 <ul class="mb-0">
-                    <li>Each download/delete action requires your document access password</li>
                     <li>Your documents are only accessible to you</li>
-                    <li>Passwords are securely hashed and never stored in plain text</li>
+                    <li>Secure authentication protects your account</li>
+                    <li>All file transfers are encrypted</li>
                 </ul>
             </div>
         </div>

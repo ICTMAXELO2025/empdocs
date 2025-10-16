@@ -52,9 +52,7 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 
 # Models
 class Employee(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    doc_access_password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     documents = db.relationship('Document', backref='owner', lazy=True, cascade='all, delete-orphan')
 
@@ -85,9 +83,7 @@ def init_db():
             # Create default admin user if no users exist
             if not Employee.query.first():
                 admin = Employee(
-                    username='admin',
-                    password_hash=generate_password_hash('admin123'),
-                    doc_access_password_hash=generate_password_hash('doc123')
+                    password_hash=generate_password_hash('admin123')
                 )
                 db.session.add(admin)
                 db.session.commit()
@@ -111,34 +107,26 @@ def register():
         return redirect(url_for('dashboard'))
         
     if request.method == 'POST':
-        username = request.form.get('username')
-        login_password = request.form.get('login_password')
-        doc_password = request.form.get('doc_password')
-        confirm_doc_password = request.form.get('confirm_doc_password')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
         
-        if not all([username, login_password, doc_password, confirm_doc_password]):
+        if not all([password, confirm_password]):
             flash('All fields are required')
             return render_template('register.html')
         
-        if doc_password != confirm_doc_password:
-            flash('Document access passwords do not match')
-            return render_template('register.html')
-        
-        if Employee.query.filter_by(username=username).first():
-            flash('Username already exists')
+        if password != confirm_password:
+            flash('Passwords do not match')
             return render_template('register.html')
         
         try:
             employee = Employee(
-                username=username,
-                password_hash=generate_password_hash(login_password),
-                doc_access_password_hash=generate_password_hash(doc_password)
+                password_hash=generate_password_hash(password)
             )
             
             db.session.add(employee)
             db.session.commit()
             
-            logger.info(f"✅ New employee registered: {username}")
+            logger.info("✅ New employee registered")
             flash('Registration successful! Please login with your credentials.')
             return redirect(url_for('login'))
             
@@ -155,19 +143,18 @@ def login():
         return redirect(url_for('dashboard'))
         
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        # Since we don't have usernames, we'll use the first employee
+        # In a real app, you'd want a better authentication system
+        employee = Employee.query.first()
         
-        employee = Employee.query.filter_by(username=username).first()
-        
-        if employee and check_password_hash(employee.password_hash, password):
+        if employee and check_password_hash(employee.password_hash, request.form.get('password')):
             login_user(employee)
-            logger.info(f"✅ Employee {username} logged in successfully")
+            logger.info("✅ Employee logged in successfully")
             flash('Login successful!')
             return redirect(url_for('dashboard'))
         else:
-            flash('Invalid username or password')
-            logger.warning(f"❌ Failed login attempt for username: {username}")
+            flash('Invalid password')
+            logger.warning("❌ Failed login attempt")
     
     return render_template('login.html')
 
@@ -225,7 +212,7 @@ def upload():
                 db.session.add(document)
                 db.session.commit()
                 
-                logger.info(f"✅ Employee {current_user.username} uploaded file: {filename}")
+                logger.info(f"✅ Employee uploaded file: {filename}")
                 flash('File uploaded successfully!')
                 return redirect(url_for('documents'))
                 
@@ -250,43 +237,55 @@ def documents():
     
     return render_template('documents.html', documents=employee_documents)
 
-@app.route('/verify_doc_password', methods=['POST'])
+@app.route('/download_document', methods=['POST'])
 @login_required
-def verify_doc_password():
-    doc_password = request.form.get('doc_password')
+def download_document():
     document_id = request.form.get('document_id')
-    action = request.form.get('action')
     
     try:
         document = Document.query.get_or_404(document_id)
         
         if document.employee_id != current_user.id:
             flash('Access denied')
-            logger.warning(f"❌ Unauthorized access attempt by {current_user.username}")
+            logger.warning(f"❌ Unauthorized download attempt")
             return redirect(url_for('documents'))
         
-        if not check_password_hash(current_user.doc_access_password_hash, doc_password):
-            flash('Invalid document access password')
+        logger.info(f"✅ Employee downloaded: {document.original_filename}")
+        return send_file(
+            io.BytesIO(document.file_data),
+            as_attachment=True,
+            download_name=document.original_filename,
+            mimetype='application/octet-stream'
+        )
+            
+    except Exception as e:
+        logger.error(f"❌ Download error: {e}")
+        flash('Download failed. Please try again.')
+    
+    return redirect(url_for('documents'))
+
+@app.route('/delete_document', methods=['POST'])
+@login_required
+def delete_document():
+    document_id = request.form.get('document_id')
+    
+    try:
+        document = Document.query.get_or_404(document_id)
+        
+        if document.employee_id != current_user.id:
+            flash('Access denied')
+            logger.warning(f"❌ Unauthorized delete attempt")
             return redirect(url_for('documents'))
         
-        if action == 'download':
-            logger.info(f"✅ Employee {current_user.username} downloaded: {document.original_filename}")
-            return send_file(
-                io.BytesIO(document.file_data),
-                as_attachment=True,
-                download_name=document.original_filename,
-                mimetype='application/octet-stream'
-            )
-        elif action == 'delete':
-            db.session.delete(document)
-            db.session.commit()
-            logger.info(f"✅ Employee {current_user.username} deleted: {document.original_filename}")
-            flash('File deleted successfully!')
+        db.session.delete(document)
+        db.session.commit()
+        logger.info(f"✅ Employee deleted: {document.original_filename}")
+        flash('File deleted successfully!')
             
     except Exception as e:
         db.session.rollback()
-        logger.error(f"❌ Document operation error: {e}")
-        flash('Operation failed. Please try again.')
+        logger.error(f"❌ Delete error: {e}")
+        flash('Delete failed. Please try again.')
     
     return redirect(url_for('documents'))
 

@@ -10,13 +10,9 @@
             <div class="card-body">
                 <form method="POST">
                     <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
-                    </div>
-                    
-                    <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
                         <input type="password" class="form-control" id="password" name="password" required>
+                        <div class="form-text">Enter your account password to login</div>
                     </div>
                     
                     <button type="submit" class="btn btn-primary w-100">Login</button>
@@ -25,7 +21,7 @@
                 <div class="text-center mt-3">
                     <a href="{{ url_for('register') }}">Don't have an account? Register here</a>
                 </div>
-                  <div class="text-center mt-3">
+                <div class="text-center mt-3">
                     <a href="https://mbs-qk5p.onrender.com/employee/dashboard">Back to Dashboard</a>
                 </div>
             </div>
